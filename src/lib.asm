@@ -55,7 +55,8 @@ _beep
     dec X; bne (wait1)
 
     # beep on
-    stz [M_BEEP]
+    lda $FF
+    sta [M_BEEP]
     ldx $80
     __wait2
     dec X; bne (wait2)
@@ -132,7 +133,7 @@ _setline
     
 _setcursor
     # Cursor location is stored in A and is a value from 0 to 255
-    sta <$04>; rol A; rol A; rol A; rol A; and %0000_0111
+    sta <$04>; lsr A; lsr A; lsr A; lsr A; lsr A
     jsr [setpage]
     
     lda <$04>; and %0001_1111; asl A; asl A; clc; adc 4
