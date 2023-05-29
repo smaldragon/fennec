@@ -83,7 +83,7 @@
     bne (sdinit)
     
     # Open SD CARD Sector 0 (MASTER BOOT RECORD MBR) and find a FAT32 PART
-    stz <$00>; stz <$01>; stz <$02>; stz <$03>; jsr [sdsector]
+    stz <$00>; stz <$01>; stz <$02>; stz <$03>; stz <$04>; lda $05; sta <$05>; jsr [sdsector]
     
     lda [$06FE]; sta [$0404]
     lda [$06FF]; sta [$0405]
@@ -110,6 +110,7 @@
     lda [$06BE+$09+X]; sta <$01>
     lda [$06BE+$0A+X]; sta <$02>
     lda [$06BE+$0B+X]; sta <$03>
+    stz <$04>; lda $05; sta <$05>
     jsr [sdsector]
     
     lda [$06FE]; sta [$0406]
@@ -143,12 +144,14 @@
     lda <f32_tables+1>; sta <$01>
     lda <f32_tables+2>; sta <$02>
     lda <f32_tables+3>; sta <$03>
+    stz <$04>; lda $05; sta <$05>
     jsr [sdsector]
     
     lda <f32_data+0>; sta <$00>
     lda <f32_data+1>; sta <$01>
     lda <f32_data+2>; sta <$02>
     lda <f32_data+3>; sta <$03>
+    stz <$04>; lda $05; sta <$05>
     jsr [sdsector]
   
     _initfail
@@ -229,6 +232,7 @@ _readroot
     lda <f32_data+1>; sta <$01>; sta <f32_cur+1>
     lda <f32_data+2>; sta <$02>; sta <f32_cur+2>
     lda <f32_data+3>; sta <$03>; sta <f32_cur+3>
+    stz <$04>; lda $05; sta <$05>
     jsr [sdsector]
     
     
@@ -320,7 +324,7 @@ _readroot
     lda <f32_cur+1>; adc 0; sta <$01>; sta <f32_cur+1>
     lda <f32_cur+2>; adc 0; sta <$02>; sta <f32_cur+2>
     lda <f32_cur+3>; adc 0; sta <$03>; sta <f32_cur+3>
-    
+    stz <$04>; lda $05; sta <$05>
     jsr [sdsector]
     
     lda $00; sta <$06>
@@ -410,54 +414,20 @@ _bootload
     
 
     ldx $FF; stx [M_DUMMY]
-    lda $00; sta <$06>
-    lda $08; sta <$07>
     
-    __sectorloop
-    lda $ff; sta [M_SD]; nop; nop
-    lda $52
-    sta [M_SD]; nop; nop; lda <$03>
-    sta [M_SD]; nop; nop; lda <$02>
-    sta [M_SD]; nop; nop; lda <$01>
-    sta [M_SD]; nop; nop; lda <$00>
-    sta [M_SD]; nop; nop; lda $01
-    sta [M_SD]; nop; nop; ldx $FF
-    
-    ldy 0
-    __waitblockstart
-        lda [M_DUMMY]
-        cmp $FE; beq (end)
-        stx [M_SD]; nop; nop
-        bra (waitblockstart)
-    ___end
+    lda $00; sta <$04>
+    lda $08; sta <$05>
     __copyloop
-    
-    ldy 0
-    ___yloop
-    ldx $FF; stx [M_SD]; nop; nop; nop; lda [M_DUMMY]
-    sta [<$06>+Y]
-    inc Y; bne (yloop)
-    lda <$07>; clc; adc $01; sta <$07>
-    
-    # read crc bytes every other 256 chunk
-    bit <$01>; bzc (nocrc)
-        stx [M_DUMMY];nop;nop;nop
-        stx [M_DUMMY];nop;nop;nop
-    ___nocrc
+        jsr [sdsector]
+        clc
+        lda <$00>; adc 1; sta <$00>
+        lda <$01>; adc 0; sta <$01>
+        lda <$02>; adc 0; sta <$02>
+        lda <$03>; adc 0; sta <$03>
+        lda <$05>; inc A; sta <$05>
     cmp $80; bne (copyloop)
     
-    lda $4c
-    sta [M_SD]; nop; nop; nop
-    stz [M_SD]; nop; nop; nop
-    stz [M_SD]; nop; nop; nop
-    stz [M_SD]; nop; nop; nop
-    stz [M_SD]; nop; nop; lda $01
-    sta [M_SD]; nop; nop; ldx $FF
-    stx [M_SD]; nop; nop; ldx $FF
-    stx [M_SD]; nop; nop; ldx $FF
-    stx [M_SD]; nop; nop; ldx $FF
-    
-    nop; ldx [M_SD]
+    nop; nop; nop; ldx [M_SD]
     
     jmp [$0800]
 
@@ -489,6 +459,7 @@ rts
 _sdsector
     # CMD17 - READ_SINGLE_BLOCK
     # zp 0, 1, 2 ,3  contain the sector to read
+    # zp 4, 5        contain the location to copy the data
     lda $ff; sta [M_SD]; nop; nop
     lda $51
     sta [M_SD]; nop; nop; lda <$03>
@@ -512,18 +483,19 @@ _sdsector
     ldx $FF
     __readloop0
       stx [M_SD]; nop; nop; nop; lda [M_DUMMY];
-      stx [M_SD]; sta [$0500+Y]; inc Y; lda [M_DUMMY]
-      stx [M_SD]; sta [$0500+Y]; inc Y; lda [M_DUMMY]
-      stx [M_SD]; sta [$0500+Y]; inc Y; lda [M_DUMMY]
-      sta [$0500+Y]; inc Y
+      stx [M_SD]; sta [<$04>+Y]; inc Y; lda [M_DUMMY]
+      stx [M_SD]; sta [<$04>+Y]; inc Y; lda [M_DUMMY]
+      stx [M_SD]; sta [<$04>+Y]; inc Y; lda [M_DUMMY]
+      sta [<$04>+Y]; inc Y
       bne (readloop0)
+    inc <$05>
     ldy 0
     __readloop1
       stx [M_SD]; nop; nop; nop; lda [M_DUMMY]; 
-      stx [M_SD]; sta [$0600+Y]; inc Y; lda [M_DUMMY]
-      stx [M_SD]; sta [$0600+Y]; inc Y; lda [M_DUMMY]
-      stx [M_SD]; sta [$0600+Y]; inc Y; lda [M_DUMMY]
-      sta [$0600+Y]; inc Y
+      stx [M_SD]; sta [<$04>+Y]; inc Y; lda [M_DUMMY]
+      stx [M_SD]; sta [<$04>+Y]; inc Y; lda [M_DUMMY]
+      stx [M_SD]; sta [<$04>+Y]; inc Y; lda [M_DUMMY]
+      sta [<$04>+Y]; inc Y
       bne (readloop1)
     
     # Handle CRC and end of message
